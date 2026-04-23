@@ -33,10 +33,13 @@ export default function HomePage() {
           </nav>
           <div className="flex items-center gap-3">
             <Link href="/patient">
-              <Button variant="outline" size="sm">Patient Login</Button>
+              <Button variant="outline" size="sm">Patient</Button>
             </Link>
             <Link href="/nurse">
-              <Button size="sm">Nurse Login</Button>
+              <Button variant="outline" size="sm">Nurse</Button>
+            </Link>
+            <Link href="/admin">
+              <Button size="sm">Admin</Button>
             </Link>
           </div>
         </div>

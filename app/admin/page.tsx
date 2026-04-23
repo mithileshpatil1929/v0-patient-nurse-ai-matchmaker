@@ -12,111 +12,77 @@ import {
   Heart, Users, Activity, Brain, Search, Filter,
   CheckCircle, Clock, Video, FileText, AlertTriangle,
   TrendingUp, UserCheck, Stethoscope, Settings, Bell,
-  ChevronRight, Eye, Play, User
+  ChevronRight, Eye, Play, User, MapPin, Phone
 } from "lucide-react"
-
-interface MatchingProcess {
-  id: string
-  patientName: string
-  symptoms: string[]
-  status: "shortlisting" | "interviewing" | "matched" | "completed"
-  matchedNurses: NurseMatch[]
-  createdAt: string
-}
-
-interface NurseMatch {
-  id: string
-  name: string
-  matchScore: number
-  skills: string[]
-  experience: string
-  verified: boolean
-  interviewStatus: "pending" | "completed" | "selected"
-}
-
-interface VerificationQueue {
-  id: string
-  name: string
-  quizScore: number
-  documentsVerified: boolean
-  interviewDate: string
-  status: "pending" | "passed" | "failed"
-}
+import { useStore, type CareRequest } from "@/lib/store"
 
 export default function AdminDashboard() {
+  const { 
+    nurses, 
+    careRequests, 
+    assignNurseToRequest,
+    notifications,
+    getUnreadCount,
+    markNotificationRead
+  } = useStore()
+  
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedProcess, setSelectedProcess] = useState<string | null>(null)
+  const [showNotifications, setShowNotifications] = useState(false)
 
+  const adminNotifications = notifications.filter(n => n.forRole === "admin")
+  const unreadCount = getUnreadCount("admin", "admin")
+
+  // Calculate stats
   const stats = {
-    totalPatients: 1247,
-    totalNurses: 389,
-    activeMatches: 45,
-    successRate: 94.5
+    totalPatients: careRequests.length,
+    totalNurses: nurses.length,
+    verifiedNurses: nurses.filter(n => n.verified).length,
+    onlineNurses: nurses.filter(n => n.isOnline).length,
+    activeMatches: careRequests.filter(r => r.status === "shortlisting" || r.status === "interview").length,
+    completedMatches: careRequests.filter(r => r.status === "matched" || r.status === "completed").length,
+    pendingRequests: careRequests.filter(r => r.status === "pending" || r.status === "shortlisting").length
   }
-
-  const matchingProcesses: MatchingProcess[] = [
-    {
-      id: "1",
-      patientName: "Ramesh Kumar",
-      symptoms: ["Fever", "Headache", "Body Pain"],
-      status: "interviewing",
-      matchedNurses: [
-        { id: "n1", name: "Priya Sharma", matchScore: 95, skills: ["General Care", "Elderly Care"], experience: "5 years", verified: true, interviewStatus: "completed" },
-        { id: "n2", name: "Anjali Verma", matchScore: 88, skills: ["General Care"], experience: "3 years", verified: true, interviewStatus: "pending" },
-        { id: "n3", name: "Sunita Roy", matchScore: 82, skills: ["Home Care"], experience: "4 years", verified: true, interviewStatus: "pending" }
-      ],
-      createdAt: "2024-01-15 10:30"
-    },
-    {
-      id: "2",
-      patientName: "Sunita Devi",
-      symptoms: ["Post-surgery care", "Wound dressing"],
-      status: "shortlisting",
-      matchedNurses: [
-        { id: "n4", name: "Meera Patel", matchScore: 92, skills: ["Surgical Care", "ICU"], experience: "7 years", verified: true, interviewStatus: "pending" },
-        { id: "n5", name: "Kavita Singh", matchScore: 89, skills: ["Wound Care"], experience: "6 years", verified: true, interviewStatus: "pending" }
-      ],
-      createdAt: "2024-01-15 11:45"
-    },
-    {
-      id: "3",
-      patientName: "Mohan Patel",
-      symptoms: ["Diabetes monitoring", "Insulin administration"],
-      status: "matched",
-      matchedNurses: [
-        { id: "n6", name: "Rekha Joshi", matchScore: 98, skills: ["Diabetes Care", "Chronic Care"], experience: "8 years", verified: true, interviewStatus: "selected" }
-      ],
-      createdAt: "2024-01-14 14:20"
-    }
-  ]
-
-  const verificationQueue: VerificationQueue[] = [
-    { id: "v1", name: "Neha Gupta", quizScore: 92, documentsVerified: true, interviewDate: "2024-01-16", status: "pending" },
-    { id: "v2", name: "Pooja Sharma", quizScore: 88, documentsVerified: true, interviewDate: "2024-01-15", status: "passed" },
-    { id: "v3", name: "Ritu Agarwal", quizScore: 65, documentsVerified: false, interviewDate: "-", status: "failed" },
-    { id: "v4", name: "Sonia Mehta", quizScore: 95, documentsVerified: true, interviewDate: "2024-01-17", status: "pending" }
-  ]
 
   const getStatusColor = (status: string) => {
     switch(status) {
+      case "pending": return "bg-gray-500 text-white"
       case "shortlisting": return "bg-blue-500 text-white"
-      case "interviewing": return "bg-yellow-500 text-black"
-      case "matched": case "passed": return "bg-primary text-primary-foreground"
-      case "completed": case "selected": return "bg-primary text-primary-foreground"
-      case "failed": return "bg-destructive text-white"
-      case "pending": return "bg-muted text-muted-foreground"
+      case "interview": return "bg-yellow-500 text-black"
+      case "matched": case "completed": return "bg-primary text-primary-foreground"
+      case "cancelled": return "bg-destructive text-white"
+      default: return "bg-muted text-muted-foreground"
+    }
+  }
+
+  const getPriorityColor = (priority: string) => {
+    switch(priority) {
+      case "high": return "bg-red-500 text-white"
+      case "medium": return "bg-yellow-500 text-black"
+      case "low": return "bg-primary text-primary-foreground"
       default: return "bg-muted text-muted-foreground"
     }
   }
 
   const getProgressValue = (status: string) => {
     switch(status) {
+      case "pending": return 15
       case "shortlisting": return 33
-      case "interviewing": return 66
+      case "interview": return 66
       case "matched": case "completed": return 100
       default: return 0
     }
   }
+
+  const handleAssignNurse = (requestId: string, nurseId: string) => {
+    assignNurseToRequest(requestId, nurseId)
+  }
+
+  const filteredRequests = careRequests.filter(request => 
+    searchQuery === "" || 
+    request.patient.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    request.symptoms.some(s => s.toLowerCase().includes(searchQuery.toLowerCase()))
+  )
 
   return (
     <div className="min-h-screen bg-background">
@@ -128,12 +94,62 @@ export default function AdminDashboard() {
               <Heart className="h-5 w-5 text-primary-foreground" />
             </div>
             <span className="text-xl font-bold text-foreground">Digital Savers</span>
-            <Badge variant="outline" className="ml-2">Admin</Badge>
+            <Badge variant="outline" className="ml-2">Admin Panel</Badge>
           </Link>
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon">
-              <Bell className="h-5 w-5" />
-            </Button>
+            <div className="relative">
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => setShowNotifications(!showNotifications)}
+              >
+                <Bell className="h-5 w-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-destructive text-[10px] font-bold text-white flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </Button>
+              
+              {/* Notifications Dropdown */}
+              {showNotifications && (
+                <div className="absolute right-0 top-12 w-96 rounded-lg border border-border bg-card shadow-lg z-50">
+                  <div className="p-3 border-b border-border flex items-center justify-between">
+                    <h3 className="font-semibold">Activity Feed</h3>
+                    <Badge variant="outline">{adminNotifications.length} total</Badge>
+                  </div>
+                  <div className="max-h-96 overflow-y-auto">
+                    {adminNotifications.length === 0 ? (
+                      <p className="p-4 text-center text-sm text-muted-foreground">No activity yet</p>
+                    ) : (
+                      adminNotifications.slice(0, 15).map(notif => (
+                        <div 
+                          key={notif.id}
+                          className={`p-3 border-b border-border last:border-0 cursor-pointer hover:bg-muted/50 ${!notif.read ? "bg-primary/5" : ""}`}
+                          onClick={() => markNotificationRead(notif.id)}
+                        >
+                          <div className="flex items-start gap-2">
+                            <div className={`h-2 w-2 rounded-full mt-2 ${
+                              notif.type === "request" ? "bg-blue-500" :
+                              notif.type === "match" ? "bg-primary" :
+                              notif.type === "assignment" ? "bg-yellow-500" :
+                              "bg-gray-500"
+                            }`} />
+                            <div className="flex-1">
+                              <p className="font-medium text-sm">{notif.title}</p>
+                              <p className="text-xs text-muted-foreground mt-1">{notif.message}</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {notif.createdAt.toLocaleTimeString()}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             <Button variant="ghost" size="icon">
               <Settings className="h-5 w-5" />
             </Button>
@@ -154,8 +170,9 @@ export default function AdminDashboard() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Total Patients</p>
+                  <p className="text-sm text-muted-foreground">Total Requests</p>
                   <p className="text-2xl font-bold text-foreground">{stats.totalPatients}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{stats.pendingRequests} pending</p>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                   <Users className="h-6 w-6 text-primary" />
@@ -168,7 +185,8 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Verified Nurses</p>
-                  <p className="text-2xl font-bold text-foreground">{stats.totalNurses}</p>
+                  <p className="text-2xl font-bold text-foreground">{stats.verifiedNurses}</p>
+                  <p className="text-xs text-primary mt-1">{stats.onlineNurses} online now</p>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                   <Stethoscope className="h-6 w-6 text-primary" />
@@ -182,6 +200,7 @@ export default function AdminDashboard() {
                 <div>
                   <p className="text-sm text-muted-foreground">Active Matches</p>
                   <p className="text-2xl font-bold text-foreground">{stats.activeMatches}</p>
+                  <p className="text-xs text-muted-foreground mt-1">In progress</p>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                   <Brain className="h-6 w-6 text-primary" />
@@ -193,8 +212,9 @@ export default function AdminDashboard() {
             <CardContent className="pt-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Success Rate</p>
-                  <p className="text-2xl font-bold text-foreground">{stats.successRate}%</p>
+                  <p className="text-sm text-muted-foreground">Completed</p>
+                  <p className="text-2xl font-bold text-foreground">{stats.completedMatches}</p>
+                  <p className="text-xs text-primary mt-1">Successfully matched</p>
                 </div>
                 <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
                   <TrendingUp className="h-6 w-6 text-primary" />
@@ -211,9 +231,9 @@ export default function AdminDashboard() {
               <Brain className="h-4 w-4" />
               AI Matching
             </TabsTrigger>
-            <TabsTrigger value="verification" className="gap-2">
+            <TabsTrigger value="nurses" className="gap-2">
               <UserCheck className="h-4 w-4" />
-              Verification Queue
+              Nurses ({nurses.length})
             </TabsTrigger>
             <TabsTrigger value="analytics" className="gap-2">
               <Activity className="h-4 w-4" />
@@ -240,140 +260,205 @@ export default function AdminDashboard() {
               </Button>
             </div>
 
-            {/* Matching Processes */}
-            <div className="space-y-4">
-              {matchingProcesses.map((process) => (
-                <Card 
-                  key={process.id}
-                  className={`cursor-pointer transition-all hover:shadow-md ${selectedProcess === process.id ? "border-primary" : ""}`}
-                  onClick={() => setSelectedProcess(selectedProcess === process.id ? null : process.id)}
-                >
-                  <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <CardTitle className="text-lg flex items-center gap-2">
-                          <Brain className="h-5 w-5 text-primary" />
-                          {process.patientName}
-                        </CardTitle>
-                        <CardDescription>Created: {process.createdAt}</CardDescription>
-                      </div>
-                      <Badge className={getStatusColor(process.status)}>
-                        {process.status.toUpperCase()}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {/* Symptoms */}
-                      <div className="flex flex-wrap gap-2">
-                        {process.symptoms.map((symptom, i) => (
-                          <Badge key={i} variant="outline">{symptom}</Badge>
-                        ))}
-                      </div>
-
-                      {/* Progress */}
-                      <div>
-                        <div className="flex justify-between text-sm mb-2">
-                          <span className="text-muted-foreground">Matching Progress</span>
-                          <span className="font-medium">{process.matchedNurses.length} nurses shortlisted</span>
+            {/* Care Requests */}
+            {filteredRequests.length === 0 ? (
+              <Card className="border-dashed">
+                <CardContent className="py-16 text-center">
+                  <Brain className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-medium mb-2">No Care Requests Yet</h3>
+                  <p className="text-muted-foreground max-w-md mx-auto">
+                    When patients submit care requests through the Patient Portal, they will appear here with AI-matched nurses.
+                  </p>
+                  <div className="mt-6 flex justify-center gap-4">
+                    <Link href="/patient">
+                      <Button variant="outline">Open Patient Portal</Button>
+                    </Link>
+                    <Link href="/nurse">
+                      <Button variant="outline">Open Nurse Portal</Button>
+                    </Link>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-4">
+                {filteredRequests.map((request) => (
+                  <Card 
+                    key={request.id}
+                    className={`cursor-pointer transition-all hover:shadow-md ${selectedProcess === request.id ? "border-primary" : ""}`}
+                    onClick={() => setSelectedProcess(selectedProcess === request.id ? null : request.id)}
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <CardTitle className="text-lg flex items-center gap-2">
+                            <Brain className="h-5 w-5 text-primary" />
+                            {request.patient.name}
+                          </CardTitle>
+                          <CardDescription>
+                            Created: {request.createdAt.toLocaleString()}
+                          </CardDescription>
                         </div>
-                        <Progress value={getProgressValue(process.status)} className="h-2" />
-                        <div className="flex justify-between mt-1 text-xs text-muted-foreground">
-                          <span>Shortlisting</span>
-                          <span>Interview</span>
-                          <span>Matched</span>
+                        <div className="flex gap-2">
+                          <Badge className={getPriorityColor(request.priority)}>
+                            {request.priority.toUpperCase()}
+                          </Badge>
+                          <Badge className={getStatusColor(request.status)}>
+                            {request.status.toUpperCase()}
+                          </Badge>
                         </div>
                       </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        {/* Symptoms */}
+                        <div className="flex flex-wrap gap-2">
+                          {request.symptoms.map((symptom, i) => (
+                            <Badge key={i} variant="outline">{symptom}</Badge>
+                          ))}
+                        </div>
 
-                      {/* Expanded Details */}
-                      {selectedProcess === process.id && (
-                        <div className="mt-4 pt-4 border-t border-border space-y-4">
-                          <h4 className="font-medium flex items-center gap-2">
-                            <Users className="h-4 w-4 text-primary" />
-                            Shortlisted Nurses (AI Ranked)
-                          </h4>
-                          <div className="space-y-3">
-                            {process.matchedNurses.map((nurse) => (
-                              <div 
-                                key={nurse.id}
-                                className="flex items-center justify-between rounded-lg border border-border p-3"
-                              >
-                                <div className="flex items-center gap-3">
-                                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                                    <User className="h-5 w-5 text-primary" />
-                                  </div>
-                                  <div>
-                                    <p className="font-medium flex items-center gap-2">
-                                      {nurse.name}
-                                      {nurse.verified && (
-                                        <Badge variant="outline" className="text-xs">
-                                          <CheckCircle className="h-3 w-3 mr-1" />
-                                          Verified
-                                        </Badge>
-                                      )}
-                                    </p>
-                                    <p className="text-sm text-muted-foreground">
-                                      {nurse.experience} | {nurse.skills.join(", ")}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                  <Badge className="bg-primary/10 text-primary">
-                                    {nurse.matchScore}% Match
-                                  </Badge>
-                                  <Badge className={getStatusColor(nurse.interviewStatus)}>
-                                    {nurse.interviewStatus}
-                                  </Badge>
-                                  <div className="flex gap-1">
-                                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                                      <Eye className="h-4 w-4" />
-                                    </Button>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8">
-                                      <Video className="h-4 w-4" />
-                                    </Button>
-                                  </div>
-                                </div>
+                        {/* Patient Info */}
+                        <div className="grid grid-cols-3 gap-4 text-sm">
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <User className="h-4 w-4" />
+                            <span>Age: {request.patient.age}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <MapPin className="h-4 w-4" />
+                            <span>{request.patient.location}</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-muted-foreground">
+                            <Clock className="h-4 w-4" />
+                            <span>{request.duration}</span>
+                          </div>
+                        </div>
+
+                        {/* Progress */}
+                        <div>
+                          <div className="flex justify-between text-sm mb-2">
+                            <span className="text-muted-foreground">Matching Progress</span>
+                            <span className="font-medium">{request.matchedNurses.length} nurses shortlisted</span>
+                          </div>
+                          <Progress value={getProgressValue(request.status)} className="h-2" />
+                          <div className="flex justify-between mt-1 text-xs text-muted-foreground">
+                            <span>Shortlisting</span>
+                            <span>Interview</span>
+                            <span>Matched</span>
+                          </div>
+                        </div>
+
+                        {/* Assigned Nurse */}
+                        {request.assignedNurse && (
+                          <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+                            <div className="flex items-center gap-3">
+                              <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+                                <User className="h-5 w-5 text-primary" />
                               </div>
-                            ))}
+                              <div className="flex-1">
+                                <p className="font-medium flex items-center gap-2">
+                                  Assigned: {request.assignedNurse.name}
+                                  <Badge variant="outline" className="text-xs">
+                                    <CheckCircle className="h-3 w-3 mr-1" />
+                                    Verified
+                                  </Badge>
+                                </p>
+                                <p className="text-sm text-muted-foreground">
+                                  {request.assignedNurse.experience} | {request.assignedNurse.specialization}
+                                </p>
+                              </div>
+                            </div>
                           </div>
-                          <div className="flex gap-3">
-                            <Button className="gap-2">
-                              <CheckCircle className="h-4 w-4" />
-                              Finalize Match
-                            </Button>
-                            <Button variant="outline" className="gap-2">
-                              <Video className="h-4 w-4" />
-                              Schedule Interview
-                            </Button>
-                          </div>
-                        </div>
-                      )}
+                        )}
 
-                      <div className="flex justify-end">
-                        <ChevronRight className={`h-5 w-5 text-muted-foreground transition-transform ${selectedProcess === process.id ? "rotate-90" : ""}`} />
+                        {/* Expanded Details */}
+                        {selectedProcess === request.id && !request.assignedNurse && (
+                          <div className="mt-4 pt-4 border-t border-border space-y-4">
+                            <h4 className="font-medium flex items-center gap-2">
+                              <Users className="h-4 w-4 text-primary" />
+                              Shortlisted Nurses (AI Ranked)
+                            </h4>
+                            <div className="space-y-3">
+                              {request.matchedNurses.map((match) => (
+                                <div 
+                                  key={match.nurse.id}
+                                  className="flex items-center justify-between rounded-lg border border-border p-3"
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                                      <User className="h-5 w-5 text-primary" />
+                                    </div>
+                                    <div>
+                                      <p className="font-medium flex items-center gap-2">
+                                        {match.nurse.name}
+                                        {match.nurse.verified && (
+                                          <Badge variant="outline" className="text-xs">
+                                            <CheckCircle className="h-3 w-3 mr-1" />
+                                            Verified
+                                          </Badge>
+                                        )}
+                                        <Badge variant={match.nurse.isOnline ? "default" : "secondary"} className="text-xs">
+                                          {match.nurse.isOnline ? "Online" : "Offline"}
+                                        </Badge>
+                                      </p>
+                                      <p className="text-sm text-muted-foreground">
+                                        {match.nurse.experience} | {match.nurse.skills.slice(0, 2).join(", ")}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <Badge className="bg-primary/10 text-primary">
+                                      {match.matchScore}% Match
+                                    </Badge>
+                                    <Badge className={
+                                      match.interviewStatus === "accepted" ? "bg-primary text-primary-foreground" :
+                                      match.interviewStatus === "rejected" ? "bg-destructive text-white" :
+                                      "bg-muted text-muted-foreground"
+                                    }>
+                                      {match.interviewStatus}
+                                    </Badge>
+                                    <Button 
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        handleAssignNurse(request.id, match.nurse.id)
+                                      }}
+                                      disabled={match.interviewStatus === "rejected"}
+                                    >
+                                      Assign
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        <div className="flex justify-end">
+                          <ChevronRight className={`h-5 w-5 text-muted-foreground transition-transform ${selectedProcess === request.id ? "rotate-90" : ""}`} />
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </TabsContent>
 
-          {/* Verification Queue Tab */}
-          <TabsContent value="verification" className="space-y-6">
+          {/* Nurses Tab */}
+          <TabsContent value="nurses" className="space-y-6">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <UserCheck className="h-5 w-5 text-primary" />
-                  Nurse Verification Queue
+                  Registered Nurses
                 </CardTitle>
                 <CardDescription>
-                  Review AI assessment results and approve verified nurses
+                  All verified nurses in the system
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {verificationQueue.map((nurse) => (
+                  {nurses.map((nurse) => (
                     <div 
                       key={nurse.id}
                       className="flex items-center justify-between rounded-lg border border-border p-4"
@@ -383,41 +468,43 @@ export default function AdminDashboard() {
                           <User className="h-6 w-6 text-primary" />
                         </div>
                         <div>
-                          <p className="font-medium text-foreground">{nurse.name}</p>
-                          <div className="flex items-center gap-4 mt-1 text-sm text-muted-foreground">
+                          <p className="font-medium text-foreground flex items-center gap-2">
+                            {nurse.name}
+                            {nurse.verified && (
+                              <Badge variant="outline" className="text-xs">
+                                <CheckCircle className="h-3 w-3 mr-1" />
+                                Verified
+                              </Badge>
+                            )}
+                          </p>
+                          <p className="text-sm text-muted-foreground">{nurse.specialization}</p>
+                          <div className="flex items-center gap-4 mt-1 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1">
-                              <Brain className="h-3 w-3" />
-                              Quiz: {nurse.quizScore}%
+                              <Clock className="h-3 w-3" />
+                              {nurse.experience}
                             </span>
                             <span className="flex items-center gap-1">
-                              <FileText className="h-3 w-3" />
-                              Docs: {nurse.documentsVerified ? "Verified" : "Pending"}
+                              <MapPin className="h-3 w-3" />
+                              {nurse.location}
                             </span>
                             <span className="flex items-center gap-1">
-                              <Video className="h-3 w-3" />
-                              Interview: {nurse.interviewDate}
+                              <Activity className="h-3 w-3" />
+                              {nurse.completedJobs} jobs
                             </span>
                           </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
-                        <Badge className={getStatusColor(nurse.status)}>
-                          {nurse.status.toUpperCase()}
+                        <Badge variant={nurse.isOnline ? "default" : "secondary"}>
+                          {nurse.isOnline ? "Online" : "Offline"}
                         </Badge>
-                        <div className="flex gap-1">
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <Play className="h-4 w-4" />
-                          </Button>
-                          {nurse.status === "pending" && (
-                            <>
-                              <Button size="sm" className="h-8">Approve</Button>
-                              <Button size="sm" variant="destructive" className="h-8">Reject</Button>
-                            </>
-                          )}
+                        <div className="flex items-center gap-1 text-sm">
+                          <span className="text-yellow-500">&#9733;</span>
+                          <span>{nurse.rating}</span>
                         </div>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <Eye className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
                   ))}
@@ -431,88 +518,93 @@ export default function AdminDashboard() {
             <div className="grid gap-6 md:grid-cols-2">
               <Card>
                 <CardHeader>
-                  <CardTitle>AI Matching Performance</CardTitle>
-                  <CardDescription>Success metrics over the last 30 days</CardDescription>
+                  <CardTitle>Platform Overview</CardTitle>
+                  <CardDescription>Real-time statistics</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Average Match Score</span>
-                      <span className="font-medium text-foreground">92.3%</span>
+                      <span className="text-sm text-muted-foreground">Total Care Requests</span>
+                      <span className="text-lg font-bold">{stats.totalPatients}</span>
                     </div>
-                    <Progress value={92.3} className="h-2" />
-                    
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Patient Satisfaction</span>
-                      <span className="font-medium text-foreground">94.5%</span>
+                      <span className="text-sm text-muted-foreground">Pending Requests</span>
+                      <span className="text-lg font-bold text-yellow-500">{stats.pendingRequests}</span>
                     </div>
-                    <Progress value={94.5} className="h-2" />
-                    
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Nurse Acceptance Rate</span>
-                      <span className="font-medium text-foreground">87.2%</span>
+                      <span className="text-sm text-muted-foreground">Active Matching</span>
+                      <span className="text-lg font-bold text-blue-500">{stats.activeMatches}</span>
                     </div>
-                    <Progress value={87.2} className="h-2" />
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Successfully Matched</span>
+                      <span className="text-lg font-bold text-primary">{stats.completedMatches}</span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
 
               <Card>
                 <CardHeader>
-                  <CardTitle>Verification Stats</CardTitle>
-                  <CardDescription>Nurse onboarding metrics</CardDescription>
+                  <CardTitle>Nurse Availability</CardTitle>
+                  <CardDescription>Current status overview</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Quiz Pass Rate</span>
-                      <span className="font-medium text-foreground">78.5%</span>
+                      <span className="text-sm text-muted-foreground">Total Registered</span>
+                      <span className="text-lg font-bold">{stats.totalNurses}</span>
                     </div>
-                    <Progress value={78.5} className="h-2" />
-                    
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Document Verification</span>
-                      <span className="font-medium text-foreground">95.2%</span>
+                      <span className="text-sm text-muted-foreground">Verified</span>
+                      <span className="text-lg font-bold text-primary">{stats.verifiedNurses}</span>
                     </div>
-                    <Progress value={95.2} className="h-2" />
-                    
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">Interview Completion</span>
-                      <span className="font-medium text-foreground">89.1%</span>
+                      <span className="text-sm text-muted-foreground">Currently Online</span>
+                      <span className="text-lg font-bold text-primary">{stats.onlineNurses}</span>
                     </div>
-                    <Progress value={89.1} className="h-2" />
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="md:col-span-2">
-                <CardHeader>
-                  <CardTitle>Recent Activity</CardTitle>
-                  <CardDescription>Latest system events</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {[
-                      { icon: CheckCircle, text: "Nurse Priya Sharma matched with patient Ramesh Kumar", time: "5 min ago", color: "text-primary" },
-                      { icon: Brain, text: "AI shortlisted 3 nurses for patient Sunita Devi", time: "15 min ago", color: "text-primary" },
-                      { icon: UserCheck, text: "Nurse Rekha Joshi completed verification", time: "1 hour ago", color: "text-primary" },
-                      { icon: AlertTriangle, text: "High priority request received from Andheri", time: "2 hours ago", color: "text-yellow-500" },
-                      { icon: Video, text: "Interview completed for Nurse Anjali Verma", time: "3 hours ago", color: "text-primary" }
-                    ].map((activity, i) => (
-                      <div key={i} className="flex items-center gap-4">
-                        <div className={`h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center ${activity.color}`}>
-                          <activity.icon className="h-4 w-4" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm text-foreground">{activity.text}</p>
-                          <p className="text-xs text-muted-foreground">{activity.time}</p>
-                        </div>
-                      </div>
-                    ))}
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Offline</span>
+                      <span className="text-lg font-bold text-muted-foreground">{stats.totalNurses - stats.onlineNurses}</span>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
+
+            {/* Recent Activity */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Activity className="h-5 w-5 text-primary" />
+                  Recent Activity
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {adminNotifications.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">No activity yet. Activity will appear here when patients and nurses interact with the platform.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {adminNotifications.slice(0, 10).map(notif => (
+                      <div key={notif.id} className="flex items-start gap-3 rounded-lg border border-border p-3">
+                        <div className={`h-2 w-2 rounded-full mt-2 ${
+                          notif.type === "request" ? "bg-blue-500" :
+                          notif.type === "match" ? "bg-primary" :
+                          notif.type === "assignment" ? "bg-yellow-500" :
+                          "bg-gray-500"
+                        }`} />
+                        <div className="flex-1">
+                          <p className="font-medium text-sm">{notif.title}</p>
+                          <p className="text-xs text-muted-foreground mt-1">{notif.message}</p>
+                        </div>
+                        <span className="text-xs text-muted-foreground">
+                          {notif.createdAt.toLocaleTimeString()}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
