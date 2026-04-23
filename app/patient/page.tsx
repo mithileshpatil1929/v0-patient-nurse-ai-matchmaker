@@ -15,6 +15,7 @@ import {
 } from "lucide-react"
 import { SOSEmergency } from "@/components/sos-emergency"
 import { useStore, type CareRequest } from "@/lib/store"
+import { formatTime } from "@/lib/format"
 
 type TriageLevel = "high" | "medium" | "low" | null
 type ServiceType = "immediate" | "longterm" | null
@@ -286,9 +287,9 @@ export default function PatientDashboard() {
                         >
                           <p className="font-medium text-sm">{notif.title}</p>
                           <p className="text-xs text-muted-foreground mt-1">{notif.message}</p>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {notif.createdAt.toLocaleTimeString()}
-                          </p>
+<p className="text-xs text-muted-foreground mt-1" suppressHydrationWarning>
+                                            {formatTime(notif.createdAt)}
+                                          </p>
                         </div>
                       ))
                     )}
@@ -353,8 +354,8 @@ export default function PatientDashboard() {
                         }`}
                       >
                         <p className="text-sm whitespace-pre-line">{message.content}</p>
-                        <p className="mt-1 text-xs opacity-70">
-                          {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        <p className="mt-1 text-xs opacity-70" suppressHydrationWarning>
+                          {formatTime(message.timestamp)}
                         </p>
                       </div>
                     </div>

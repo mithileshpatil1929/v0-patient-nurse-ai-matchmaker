@@ -384,7 +384,7 @@ export default function NurseRegistration() {
                     </p>
                     <p className="font-medium mb-4">{quizQuestions[currentQuestion].question}</p>
                     <RadioGroup 
-                      value={quizAnswers[quizQuestions[currentQuestion].id]?.toString()}
+                      value={quizAnswers[quizQuestions[currentQuestion].id] !== undefined ? quizAnswers[quizQuestions[currentQuestion].id].toString() : ""}
                       onValueChange={(val) => handleQuizAnswer(quizQuestions[currentQuestion].id, parseInt(val))}
                     >
                       {quizQuestions[currentQuestion].options.map((option, i) => (
